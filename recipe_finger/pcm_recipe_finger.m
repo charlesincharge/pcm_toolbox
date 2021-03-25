@@ -15,10 +15,20 @@ load data_recipe_finger7T.mat
 % ----------------------------------------------------------------
 % Data visualisation 
 % 1. visualize the representational stucture: Get the crossvalidated
-%    G-matrix for each data set and plot the average of this
+%    G-matrix for each data set and plot the average of 
+%
+% Note: is this where the G_hat is computed? Should check with
+% Ejaz/Diedrichsen
+% Can cross check the Pearson's values with their source data?  
 for s=1:length(Y)
-    G_hat(:,:,s)=pcm_estGCrossval(Y{s},partVec{s},condVec{s}); 
-end; 
+    G = pcm_estGCrossval(Y{s},partVec{s},condVec{s}); 
+    G_hat(:,:,s) = G;
+
+    % Convert to crossnobis distance, as specified in `pcm_estGCrossVal
+    % comments`
+    C = pcm_indicatorMatrix('allpairs',[1:size(G,1)]); 
+    D(:,:,s) = squareform(diag(C*G*C')); 
+end 
 Gm = mean(G_hat,3); % Mean estimate  
 subplot(2,3,1); 
 H = eye(5)-ones(5)/5; 
@@ -35,12 +45,31 @@ axis equal;
 % ----------------------------------------------------------------
 % 2. Visualize the the predicted G-matrix from the different models 
 subplot(2,3,4); 
-imagesc(Model(1).G_cent); 
-title('Muscle'); 
+idx = 1;
+imagesc(Model(idx).G_cent); 
+title(Model(idx).name); 
 
 subplot(2,3,5); 
-imagesc(Model(2).G_cent); 
-title('Naturalstats'); 
+idx = 2;
+imagesc(Model(idx).G_cent); 
+title(Model(idx).name); 
+
+% 
+% TODO: distinguish between RDM and G_subj?
+uniqueConds = unique(vertcat(condVec{:}));
+numCond = numel(uniqueConds);
+num_subjs = size(G_hat,3);
+num_models = numel(Model);
+ 
+corr_arr = nan(num_subjs, num_models);
+mask = logical(tril(ones(numCond), -1));
+for subj_idx = 1:num_subjs
+    RDM_subj = squeeze(D(:,:,subj_idx));
+    for model_idx = 1:num_models
+        corr_arr(subj_idx, model_idx) = corr(RDM_subj(mask), Model(model_idx).RDM(mask));
+    end
+end
+corr_table = array2table(corr_arr, 'VariableNames',{Model.name});
 
 % ----------------------------------------------------------------
 % Now build the models 
@@ -95,4 +124,4 @@ runEffect  = 'fixed';
 subplot(2,3,[3 6]); 
 T = pcm_plotModelLikelihood(Tcross,M,'upperceil',Tgroup.likelihood(:,5)); 
 
-varargout={T,M}; 
+varargout={T,M, D, corr_table}; 
